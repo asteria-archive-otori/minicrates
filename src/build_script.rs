@@ -1,17 +1,14 @@
 use ahash::RandomState;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use glob::{glob, Paths, Pattern};
+use glob::{glob, Pattern};
 use serde::Deserialize;
 use std::io::Read;
 use std::{
     collections::HashMap,
     env,
     fs::{self, DirEntry, File},
-    io::Write,
-    iter::Map,
     path::PathBuf,
-    process::{exit, Command},
 };
 use toml::{from_str, Table, Value};
 #[derive(Deserialize)]
@@ -123,6 +120,12 @@ impl BuildOptions {
             let rel_path = pathdiff::diff_paths(&entry, &lib_path).unwrap();
             println!("rel: {rel_path:#?} lib: {lib_path:#?} entry: {entry:#?}");
             fs::create_dir_all(lib_path.parent().unwrap()).unwrap();
+            let gitignore = PathBuf::from(&manifest_dir)
+                .join("minicrates")
+                .join(".gitignore");
+            if !gitignore.try_exists().unwrap() {
+                fs::write(gitignore, "*/**").unwrap();
+            }
             fs::write(lib_path, format!("include!({rel_path:#?});")).unwrap();
 
             let cargo_toml = PathBuf::from(crate_dist).join("Cargo.toml");
