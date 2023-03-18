@@ -13,7 +13,7 @@ use std::{
     path::PathBuf,
     process::{exit, Command},
 };
-use toml::{Table, Value};
+use toml::{from_str, Table, Value};
 #[derive(Deserialize)]
 pub struct StoryCrate {
     /// Contains the manifest to be passed into Cargo.
@@ -31,6 +31,16 @@ pub struct BuildOptions {
 #[derive(Deserialize)]
 pub struct Manifest {
     minicrates: Option<Table>,
+    workspace: Option<Workspace>,
+}
+#[derive(Deserialize)]
+pub struct WorkspaceManifest {
+    workspace: Option<Workspace>,
+}
+
+#[derive(Deserialize)]
+pub struct Workspace {
+    members: Vec<String>,
 }
 impl BuildOptions {
     pub fn build(&mut self, path: &str) {
@@ -69,6 +79,7 @@ impl BuildOptions {
                 self.no_minicrates.as_mut().unwrap();
             }
         }
+
         folder.set_length(entries.len().try_into().unwrap());
 
         for entry in entries {
@@ -120,18 +131,9 @@ impl BuildOptions {
 name = ""#
                 .to_string()
                 + &id.to_string()
-                + r#".flarastory"
+                + r#".minicrate"
 [lib]
-crate-type = ["dylib"]
-                
-[dependencies]
-framework = { version = "0.1.0", path = ""#
-                + &manifest_dir
-                + r#"/framework" }
-bevy = { version = "0.9.1", features = ["dynamic"] }
-bevy_rpg = { version = "0.1.0", path = ""#
-                + &manifest_dir
-                + r#"/bevy-rpg" }"#;
+crate-type = ["dylib"]"#;
             let default: Table = toml::from_str(&str).unwrap();
             /// Combine any any number of tables into a single one
             fn combine_tables(tables: &Vec<&Table>) -> Table {
@@ -175,15 +177,63 @@ bevy_rpg = { version = "0.1.0", path = ""#
                 );
             }
             let table = combine_tables(&tables.iter().map(|i| i).collect());
-            if !cargo_toml.exists() {
-                fs::create_dir_all(cargo_toml.parent().unwrap()).unwrap();
-                File::create(&cargo_toml).unwrap();
-            }
 
             fs::write(&cargo_toml, toml::to_string(&table).unwrap()).unwrap();
-            println!("cargo:warning={cargo_toml:#?}");
 
             folder.inc(1);
+        }
+
+        // Try to look if the minicrates are added to Cargo's workspace list or not.
+
+        let result = if let Some(workspace) = manifest.workspace {
+            workspace.members.contains(&"minicrates".to_string())
+        } else {
+            let mut path = PathBuf::from(manifest_dir);
+
+            let mut relative = PathBuf::new();
+            (|| {
+                let mut result = false;
+                for count in 0..5 {
+                    path = path.parent().unwrap().to_owned();
+                    let parent_manifest = path.join("Cargo.toml");
+                    if if parent_manifest.try_exists().unwrap() {
+                        let mut string = String::new();
+
+                        File::open(parent_manifest)
+                            .unwrap()
+                            .read_to_string(&mut string)
+                            .unwrap();
+
+                        let manifest: WorkspaceManifest = from_str(&string).unwrap();
+                        if let Some(workspace) = manifest.workspace {
+                            if workspace.members.contains(
+                                &relative.join("minicrates").to_string_lossy().to_string(),
+                            ) {
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    } {
+                        result = true;
+                        break;
+                    } else {
+                        relative.extend([path.file_name().unwrap()]);
+                        if count == 5 {
+                            break;
+                        }
+                    };
+                }
+                result
+            })()
+        };
+
+        if !result {
+            println!("cargo:warning=Minicrates has configured the minicrates for youu!! It only needs Cargo to actually compile it in order to run.");
         }
     }
 }
