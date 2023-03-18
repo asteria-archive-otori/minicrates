@@ -60,7 +60,7 @@ impl BuildOptions {
             .unwrap();
         let manifest: Manifest = toml::from_str(&manifest).unwrap();
 
-        let entries: Vec<PathBuf> = glob(&format!("{}/${path}", &manifest_dir))
+        let entries: Vec<PathBuf> = glob(path)
             .expect("Failed to read glob pattern")
             .map(|glob| glob.unwrap())
             .collect();
@@ -69,7 +69,6 @@ impl BuildOptions {
                 self.no_minicrates.as_mut().unwrap();
             }
         }
-        let out_dir = env::var("OUT_DIR").unwrap();
         folder.set_length(entries.len().try_into().unwrap());
 
         for entry in entries {

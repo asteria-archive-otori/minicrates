@@ -1,4 +1,4 @@
-use std::process::exit;
+use std::{env, process::exit};
 
 fn main() {
     minicrates::BuildOptions {
@@ -6,5 +6,9 @@ fn main() {
             println!("Nothing to build.");
             exit(0);
         })),
-    }.build("story")
+    }
+    .build(&format!(
+        "{}/story/**/*.mini.rs",
+        env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
 }
