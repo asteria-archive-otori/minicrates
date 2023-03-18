@@ -108,45 +108,11 @@ impl BuildOptions {
             let dirs: Vec<DirEntry> = dirs.map(|entry| entry.unwrap()).collect();
             file.reset();
             file.set_length(dirs.len().try_into().unwrap());
-
-            for path in dirs {
-                let entry = path.path();
-                let link = if if let Some(extension) = entry.extension() {
-                    if extension == ".rs" {
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                } {
-                    crate_dist.join("src")
-                } else {
-                    crate_dist.to_owned()
-                }
-                .join(entry.file_name().unwrap());
-
-                if !link.exists() {
-                    if !link.parent().unwrap().exists() {
-                        fs::create_dir_all(link.parent().unwrap()).unwrap();
-                    }
-                    #[cfg(target_os = "windows")]
-                    {
-                        let metadata = path.metadata().unwrap();
-                        if metadata.is_file() {
-                            std::os::windows::fs::symlink_file(path.path(), link);
-                        } else if metadata.is_folder() {
-                            std::os::windows::fs::symlink_dir(path.path(), link);
-                        }
-                    }
-                    println!("cargo:warning={link:#?}");
-                    println!("cargo:warning={entry:#?}");
-
-                    #[cfg(unix)]
-                    std::os::unix::fs::symlink(entry, link).unwrap();
-                }
-                file.inc(1);
-            }
+            let lib_path = dist_path.join("src").join("lib.rs");
+            let rel_path = pathdiff::diff_paths(&entry, &lib_path).unwrap();
+            println!("rel: {rel_path:#?} lib: {lib_path:#?} entry: {entry:#?}");
+            fs::create_dir_all(lib_path.parent().unwrap()).unwrap();
+            fs::write(lib_path, format!("include!({rel_path:#?});")).unwrap();
 
             let cargo_toml = PathBuf::from(crate_dist).join("Cargo.toml");
 
