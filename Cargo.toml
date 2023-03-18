@@ -15,5 +15,5 @@ toml = "0.7.2"
 
 [workspace]
 members = ["example", "example/framework",
-
+"example/minicrates/*"
 ]
