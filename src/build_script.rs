@@ -27,12 +27,12 @@ pub struct BuildOptions {
 
 #[derive(Deserialize)]
 pub struct Manifest {
-    minicrates: Option<Table>,
     workspace: Option<Workspace>,
 }
-#[derive(Deserialize)]
-pub struct WorkspaceManifest {
-    workspace: Option<Workspace>,
+
+#[derive(Deserialize, Debug)]
+pub struct Minicrates {
+    minicrates: Option<Table>,
 }
 
 #[derive(Deserialize)]
@@ -58,14 +58,20 @@ impl BuildOptions {
         );
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
-        let cargo = PathBuf::from(&manifest_dir).join("Cargo.toml");
-        let mut manifest = String::new();
+        let minicrates: Option<Minicrates> = {
+            let minicrates_file = PathBuf::from(&manifest_dir).join("Minicrates.toml");
+            if minicrates_file.try_exists().unwrap() {
+                let mut manifest = String::new();
 
-        File::open(cargo)
-            .unwrap()
-            .read_to_string(&mut manifest)
-            .unwrap();
-        let manifest: Manifest = toml::from_str(&manifest).unwrap();
+                File::open(minicrates_file)
+                    .unwrap()
+                    .read_to_string(&mut manifest)
+                    .unwrap();
+                Some(toml::from_str(&manifest).unwrap())
+            } else {
+                None
+            }
+        };
 
         let entries: Vec<PathBuf> = glob(path)
             .expect("Failed to read glob pattern")
@@ -131,10 +137,10 @@ impl BuildOptions {
             let cargo_toml = PathBuf::from(crate_dist).join("Cargo.toml");
 
             let str = r#"[package]
-name = ""#
+name = "minicrates-"#
                 .to_string()
                 + &id.to_string()
-                + r#".minicrate"
+                + r#""
 [lib]
 crate-type = ["dylib"]"#;
             let default: Table = toml::from_str(&str).unwrap();
@@ -166,21 +172,23 @@ crate-type = ["dylib"]"#;
                 table
             }
             let mut tables = vec![default];
-            if let Some(minicrates) = &manifest.minicrates {
-                tables.extend(
-                    minicrates
-                        .iter()
-                        .filter(|(key, _val)| {
-                            Pattern::new(&format!("{}/{key}", manifest_dir))
-                                .unwrap()
-                                .matches(entry.as_os_str().to_str().unwrap())
-                        })
-                        .map(|(_key, val)| Table::try_from(val).unwrap())
-                        .collect::<Vec<Table>>(),
-                );
+            if let Some(minicrates) = &minicrates {
+                if let Some(minicrates) = &minicrates.minicrates {
+                    tables.extend(
+                        minicrates
+                            .iter()
+                            .filter(|(key, _val)| {
+                                let glob = Pattern::new(&format!("{}/{key}", manifest_dir))
+                                    .unwrap()
+                                    .matches(entry.as_os_str().to_str().unwrap());
+                                glob
+                            })
+                            .map(|(_key, val)| Table::try_from(val).unwrap())
+                            .collect::<Vec<Table>>(),
+                    );
+                }
             }
             let table = combine_tables(&tables.iter().map(|i| i).collect());
-
             fs::write(&cargo_toml, toml::to_string(&table).unwrap()).unwrap();
 
             folder.inc(1);
@@ -188,16 +196,13 @@ crate-type = ["dylib"]"#;
 
         // Try to look if the minicrates are added to Cargo's workspace list or not.
 
-        let result = if let Some(workspace) = manifest.workspace {
-            workspace.members.contains(&"minicrates".to_string())
-        } else {
+        let result = {
             let mut path = PathBuf::from(manifest_dir);
 
             let mut relative = PathBuf::new();
             (|| {
                 let mut result = false;
                 for count in 0..5 {
-                    path = path.parent().unwrap().to_owned();
                     let parent_manifest = path.join("Cargo.toml");
                     if if parent_manifest.try_exists().unwrap() {
                         let mut string = String::new();
@@ -207,7 +212,7 @@ crate-type = ["dylib"]"#;
                             .read_to_string(&mut string)
                             .unwrap();
 
-                        let manifest: WorkspaceManifest = from_str(&string).unwrap();
+                        let manifest: Manifest = from_str(&string).unwrap();
                         if let Some(workspace) = manifest.workspace {
                             if workspace.members.contains(
                                 &relative.join("minicrates").to_string_lossy().to_string(),
@@ -225,9 +230,11 @@ crate-type = ["dylib"]"#;
                         result = true;
                         break;
                     } else {
-                        relative.extend([path.file_name().unwrap()]);
                         if count == 5 {
                             break;
+                        } else {
+                            path = path.parent().unwrap().to_owned();
+                            relative.extend([path.file_name().unwrap()]);
                         }
                     };
                 }

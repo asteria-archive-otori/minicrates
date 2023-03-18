@@ -10,5 +10,3 @@ edition = "2021"
 [build-dependencies]
 minicrates = { version = "0.1.0", path = ".." }
 
-[minicrates."**/*".dependencies]
-framework = { version = "0.1.0", path = "./framework" }

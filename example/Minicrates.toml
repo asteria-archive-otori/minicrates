@@ -1,0 +1,8 @@
+[minicrates."**/*".dependencies]
+framework = { version = "0.1.0", path = "./framework" }
+
+[minicrates."**/*".package]
+version = "0.1.0"
+
+[minicrates."**/*".package.metadata]
+hii = true
