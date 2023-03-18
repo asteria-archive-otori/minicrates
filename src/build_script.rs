@@ -30,7 +30,7 @@ pub struct BuildOptions {
 
 #[derive(Deserialize)]
 pub struct Manifest {
-    minicrates: Table,
+    minicrates: Option<Table>,
 }
 impl BuildOptions {
     pub fn build(&mut self, path: &str) {
@@ -190,22 +190,20 @@ bevy_rpg = { version = "0.1.0", path = ""#
 
                 table
             }
-
-            let mut tables = manifest
-                .minicrates
-                .iter()
-                .filter(|(key, value)| {
-                    Pattern::new(&format!("{}/{key}", manifest_dir))
-                        .unwrap()
-                        .matches(entry.as_os_str().to_str().unwrap())
-                })
-                .map(|(key, val)| {
-                    let mut table = Table::try_from(val).unwrap();
-                    table
-                })
-                .collect::<Vec<Table>>();
-            tables.extend([default]);
-
+            let mut tables = vec![default];
+            if let Some(minicrates) = &manifest.minicrates {
+                tables.extend(
+                    minicrates
+                        .iter()
+                        .filter(|(key, _val)| {
+                            Pattern::new(&format!("{}/{key}", manifest_dir))
+                                .unwrap()
+                                .matches(entry.as_os_str().to_str().unwrap())
+                        })
+                        .map(|(_key, val)| Table::try_from(val).unwrap())
+                        .collect::<Vec<Table>>(),
+                );
+            }
             let table = combine_tables(&tables.iter().map(|i| i).collect());
             if !cargo_toml.exists() {
                 fs::create_dir_all(cargo_toml.parent().unwrap()).unwrap();
