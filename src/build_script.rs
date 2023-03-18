@@ -81,10 +81,15 @@ impl BuildOptions {
             let id = hash_builder.hash_one(&entry);
 
             let dist_path = PathBuf::from(format!(
-                "{}/.flara/story-{:#?}-{:?}",
-                &out_dir,
-                entry.file_name().unwrap(),
+                "{}/minicrates/{}",
+                &manifest_dir,
                 entry
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .strip_suffix(".mini.rs")
+                    .unwrap(),
             ));
 
             if dist_path.exists() {
