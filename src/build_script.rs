@@ -1,15 +1,13 @@
 use ahash::RandomState;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use glob::{glob, Pattern};
 use path_clean::PathClean;
 use serde::Deserialize;
 use std::io::Read;
-use std::path::Path;
 use std::{
     collections::HashMap,
     env,
-    fs::{self, DirEntry, File},
+    fs::{self, File},
     path::PathBuf,
 };
 use toml::{from_str, Table, Value};
@@ -42,22 +40,8 @@ pub struct Workspace {
     members: Vec<String>,
 }
 impl BuildOptions {
-    pub fn build(&mut self, path: &str) {
-        let multi = MultiProgress::new();
+    pub fn build(&mut self, path: &str) -> Result<HashMap<PathBuf, PathBuf>> {
 
-        let folder = multi.add(ProgressBar::new(128));
-        folder.set_style(
-            ProgressStyle::with_template("[{elapsed_precise}] {pos:>7}/{len:7} {msg}").unwrap(),
-        );
-        let file = multi.add(ProgressBar::new(128));
-
-        file.set_style(
-            ProgressStyle::with_template(
-                "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-            )
-            .unwrap()
-            .progress_chars("##-"),
-        );
         let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minicrates: Option<Minicrates> = {
@@ -88,10 +72,6 @@ impl BuildOptions {
         folder.set_length(entries.len().try_into().unwrap());
 
         for entry in entries {
-            folder.set_message(format!(
-                "Installing symlinks: {:#?}",
-                entry.as_path().parent()
-            ));
 
             let hash_builder = RandomState::with_seed(42);
             let id = hash_builder.hash_one(&entry);
@@ -117,11 +97,7 @@ impl BuildOptions {
                 }
             }
             let crate_dist = &dist_path.join(&dist_path);
-            let dirs = fs::read_dir(entry.parent().unwrap()).unwrap();
 
-            let dirs: Vec<DirEntry> = dirs.map(|entry| entry.unwrap()).collect();
-            file.reset();
-            file.set_length(dirs.len().try_into().unwrap());
             let lib_path = dist_path.join("src").join("lib.rs");
             let rel_path = pathdiff::diff_paths(&entry, &dist_path.join("src")).unwrap();
             println!("rel: {rel_path:#?} lib: {lib_path:#?} entry: {entry:#?}");
@@ -195,7 +171,7 @@ crate-type = ["dylib"]"#;
             if let Some(dependencies) = table.get_mut("dependencies") {
                 match dependencies {
                     Value::Table(table) => {
-                        for (key, value) in table {
+                        for (_key, value) in table {
                             if let Value::Table(table) = value {
                                 if let Some(value) = table.get_mut("path") {
                                     if let Value::String(path) = value {
@@ -221,7 +197,6 @@ crate-type = ["dylib"]"#;
             }
             fs::write(&cargo_toml, toml::to_string(&table).unwrap()).unwrap();
 
-            folder.inc(1);
         }
 
         // Try to look if the minicrates are added to Cargo's workspace list or not.
