@@ -1,5 +1,6 @@
 use ahash::RandomState;
 
+use anyhow::Result;
 use glob::{glob, Pattern};
 use path_clean::PathClean;
 use serde::Deserialize;
@@ -41,38 +42,28 @@ pub struct Workspace {
 }
 impl BuildOptions {
     pub fn build(&mut self, path: &str) -> Result<HashMap<PathBuf, PathBuf>> {
-
         let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minicrates: Option<Minicrates> = {
             let minicrates_file = PathBuf::from(&manifest_dir).join("Minicrates.toml");
-            if minicrates_file.try_exists().unwrap() {
+            if minicrates_file.try_exists()? {
                 let mut manifest = String::new();
 
-                File::open(minicrates_file)
-                    .unwrap()
-                    .read_to_string(&mut manifest)
-                    .unwrap();
-                Some(toml::from_str(&manifest).unwrap())
+                File::open(minicrates_file)?.read_to_string(&mut manifest)?;
+                Some(toml::from_str(&manifest)?)
             } else {
                 None
             }
         };
 
-        let entries: Vec<PathBuf> = glob(path)
-            .expect("Failed to read glob pattern")
-            .map(|glob| glob.unwrap())
-            .collect();
+        let entries: Vec<PathBuf> = glob(path)?.map(|glob| glob.unwrap()).collect();
         if entries.len() == 0 {
             if self.no_minicrates.is_some() {
-                self.no_minicrates.as_mut().unwrap();
+                self.no_minicrates.as_mut().unwrap()();
             }
         }
 
-        folder.set_length(entries.len().try_into().unwrap());
-
         for entry in entries {
-
             let hash_builder = RandomState::with_seed(42);
             let id = hash_builder.hash_one(&entry);
 
@@ -87,9 +78,9 @@ impl BuildOptions {
             );
 
             if dist_path.exists() {
-                let metadata = dist_path.metadata().unwrap();
+                let metadata = dist_path.metadata()?;
                 if metadata.is_dir() {
-                    fs::remove_dir_all(&dist_path).unwrap();
+                    fs::remove_dir_all(&dist_path)?;
                 } else if metadata.is_file() {
                     panic!("Error: {dist_path:?} exists but it is a file!")
                 } else if metadata.is_symlink() {
@@ -101,14 +92,14 @@ impl BuildOptions {
             let lib_path = dist_path.join("src").join("lib.rs");
             let rel_path = pathdiff::diff_paths(&entry, &dist_path.join("src")).unwrap();
             println!("rel: {rel_path:#?} lib: {lib_path:#?} entry: {entry:#?}");
-            fs::create_dir_all(lib_path.parent().unwrap()).unwrap();
+            fs::create_dir_all(lib_path.parent().unwrap())?;
             let gitignore = PathBuf::from(&manifest_dir)
                 .join("minicrates")
                 .join(".gitignore");
-            if !gitignore.try_exists().unwrap() {
-                fs::write(gitignore, "*/**").unwrap();
+            if !gitignore.try_exists()? {
+                fs::write(gitignore, "*/**")?;
             }
-            fs::write(lib_path, format!("include!({rel_path:#?});")).unwrap();
+            fs::write(lib_path, format!("include!({rel_path:#?});"))?;
 
             let cargo_toml = PathBuf::from(crate_dist).join("Cargo.toml");
 
@@ -119,7 +110,7 @@ name = "minicrates-"#
                 + r#""
 [lib]
 crate-type = ["dylib"]"#;
-            let default: Table = toml::from_str(&str).unwrap();
+            let default: Table = toml::from_str(&str)?;
             /// Combine any any number of tables into a single one
             fn combine_tables(tables: &Vec<&Table>) -> Table {
                 let mut recursive_jobs: HashMap<String, Vec<&Table>> = HashMap::new();
@@ -195,8 +186,7 @@ crate-type = ["dylib"]"#;
                     _ => {}
                 }
             }
-            fs::write(&cargo_toml, toml::to_string(&table).unwrap()).unwrap();
-
+            fs::write(&cargo_toml, toml::to_string(&table)?)?;
         }
 
         // Try to look if the minicrates are added to Cargo's workspace list or not.
@@ -205,50 +195,49 @@ crate-type = ["dylib"]"#;
             let mut path = PathBuf::from(manifest_dir);
 
             let mut relative = PathBuf::new();
-            (|| {
-                let mut result = false;
-                for count in 0..5 {
-                    let parent_manifest = path.join("Cargo.toml");
-                    if if parent_manifest.try_exists().unwrap() {
-                        let mut string = String::new();
 
-                        File::open(parent_manifest)
-                            .unwrap()
-                            .read_to_string(&mut string)
-                            .unwrap();
+            let mut result = false;
+            for count in 0..5 {
+                let parent_manifest = path.join("Cargo.toml");
+                if if parent_manifest.try_exists()? {
+                    let mut string = String::new();
 
-                        let manifest: Manifest = from_str(&string).unwrap();
-                        if let Some(workspace) = manifest.workspace {
-                            if workspace.members.contains(
-                                &relative.join("minicrates").to_string_lossy().to_string(),
-                            ) {
-                                true
-                            } else {
-                                false
-                            }
+                    File::open(parent_manifest)?.read_to_string(&mut string)?;
+
+                    let manifest: Manifest = from_str(&string)?;
+                    if let Some(workspace) = manifest.workspace {
+                        if workspace
+                            .members
+                            .contains(&relative.join("minicrates").to_string_lossy().to_string())
+                        {
+                            true
                         } else {
                             false
                         }
                     } else {
                         false
-                    } {
-                        result = true;
+                    }
+                } else {
+                    false
+                } {
+                    result = true;
+                    break;
+                } else {
+                    if count == 5 {
                         break;
                     } else {
-                        if count == 5 {
-                            break;
-                        } else {
-                            path = path.parent().unwrap().to_owned();
-                            relative.extend([path.file_name().unwrap()]);
-                        }
-                    };
-                }
-                result
-            })()
+                        path = path.parent().unwrap().to_owned();
+                        relative.extend([path.file_name().unwrap()]);
+                    }
+                };
+            }
+            result
         };
 
         if !result {
             println!("cargo:warning=Minicrates has configured the minicrates for youu!! It only needs Cargo to actually compile it in order to run.");
         }
+
+        Ok(HashMap::new())
     }
 }

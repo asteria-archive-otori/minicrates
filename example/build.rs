@@ -10,5 +10,5 @@ fn main() {
     .build(&format!(
         "{}/story/**/*.mini.rs",
         env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    )).unwrap();
 }
