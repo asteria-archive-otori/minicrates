@@ -2,8 +2,10 @@ use ahash::RandomState;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use glob::{glob, Pattern};
+use path_clean::PathClean;
 use serde::Deserialize;
 use std::io::Read;
+use std::path::Path;
 use std::{
     collections::HashMap,
     env,
@@ -56,7 +58,7 @@ impl BuildOptions {
             .unwrap()
             .progress_chars("##-"),
         );
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minicrates: Option<Minicrates> = {
             let minicrates_file = PathBuf::from(&manifest_dir).join("Minicrates.toml");
@@ -94,9 +96,7 @@ impl BuildOptions {
             let hash_builder = RandomState::with_seed(42);
             let id = hash_builder.hash_one(&entry);
 
-            let dist_path = PathBuf::from(format!(
-                "{}/minicrates/{}",
-                &manifest_dir,
+            let dist_path = manifest_dir.join("minicrates").join(
                 entry
                     .file_name()
                     .unwrap()
@@ -104,7 +104,7 @@ impl BuildOptions {
                     .unwrap()
                     .strip_suffix(".mini.rs")
                     .unwrap(),
-            ));
+            );
 
             if dist_path.exists() {
                 let metadata = dist_path.metadata().unwrap();
@@ -123,7 +123,7 @@ impl BuildOptions {
             file.reset();
             file.set_length(dirs.len().try_into().unwrap());
             let lib_path = dist_path.join("src").join("lib.rs");
-            let rel_path = pathdiff::diff_paths(&entry, &lib_path).unwrap();
+            let rel_path = pathdiff::diff_paths(&entry, &dist_path.join("src")).unwrap();
             println!("rel: {rel_path:#?} lib: {lib_path:#?} entry: {entry:#?}");
             fs::create_dir_all(lib_path.parent().unwrap()).unwrap();
             let gitignore = PathBuf::from(&manifest_dir)
@@ -178,9 +178,12 @@ crate-type = ["dylib"]"#;
                         minicrates
                             .iter()
                             .filter(|(key, _val)| {
-                                let glob = Pattern::new(&format!("{}/{key}", manifest_dir))
-                                    .unwrap()
-                                    .matches(entry.as_os_str().to_str().unwrap());
+                                let glob = Pattern::new(&format!(
+                                    "{}/{key}",
+                                    manifest_dir.to_string_lossy().to_string()
+                                ))
+                                .unwrap()
+                                .matches(entry.as_os_str().to_str().unwrap());
                                 glob
                             })
                             .map(|(_key, val)| Table::try_from(val).unwrap())
@@ -188,7 +191,34 @@ crate-type = ["dylib"]"#;
                     );
                 }
             }
-            let table = combine_tables(&tables.iter().map(|i| i).collect());
+            let mut table = combine_tables(&tables.iter().map(|i| i).collect());
+            if let Some(dependencies) = table.get_mut("dependencies") {
+                match dependencies {
+                    Value::Table(table) => {
+                        for (key, value) in table {
+                            if let Value::Table(table) = value {
+                                if let Some(value) = table.get_mut("path") {
+                                    if let Value::String(path) = value {
+                                        let pathbuf = PathBuf::from(&path);
+                                        *path = pathdiff::diff_paths(
+                                            if pathbuf.is_absolute() {
+                                                pathbuf.clean()
+                                            } else {
+                                                manifest_dir.join(pathbuf).clean()
+                                            },
+                                            &dist_path,
+                                        )
+                                        .unwrap()
+                                        .to_string_lossy()
+                                        .to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
             fs::write(&cargo_toml, toml::to_string(&table).unwrap()).unwrap();
 
             folder.inc(1);
