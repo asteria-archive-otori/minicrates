@@ -13,6 +13,7 @@ path-clean = "1.0.1"
 pathdiff = "0.2.1"
 serde = { version = "1.0.154", features = ["derive"] }
 toml = "0.7.2"
+serde_json = "1.0.94"
 
 [workspace]
 members = ["example", "example/framework",

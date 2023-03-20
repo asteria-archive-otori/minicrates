@@ -41,7 +41,7 @@ pub struct Workspace {
     members: Vec<String>,
 }
 impl BuildOptions {
-    pub fn build(&mut self, path: &str) -> Result<HashMap<PathBuf, PathBuf>> {
+    pub fn build(&mut self, path: &str) -> Result<CrateIdMap> {
         let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minicrates: Option<Minicrates> = {
@@ -62,11 +62,11 @@ impl BuildOptions {
                 self.no_minicrates.as_mut().unwrap()();
             }
         }
-
+        let mut map = HashMap::new();
         for entry in entries {
             let hash_builder = RandomState::with_seed(42);
             let id = hash_builder.hash_one(&entry);
-
+            map.insert(entry.clone(), id);
             let dist_path = manifest_dir.join("minicrates").join(
                 entry
                     .file_name()
@@ -238,6 +238,11 @@ crate-type = ["dylib"]"#;
             println!("cargo:warning=Minicrates has configured the minicrates for youu!! It only needs Cargo to actually compile it in order to run.");
         }
 
-        Ok(HashMap::new())
+        Ok(map)
     }
 }
+
+/**
+ * This is.. literally.. a hash map? In minicrates, the V is always a hash of the K...
+ */
+pub type CrateIdMap = HashMap<PathBuf, u64>;
