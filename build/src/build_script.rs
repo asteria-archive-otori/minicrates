@@ -2,6 +2,7 @@ use ahash::RandomState;
 
 use anyhow::Result;
 use glob::{glob, Pattern};
+use minicrates_shared::CrateIdMap;
 use path_clean::PathClean;
 use serde::Deserialize;
 use std::io::Read;
@@ -241,8 +242,3 @@ crate-type = ["dylib"]"#;
         Ok(map)
     }
 }
-
-/**
- * This is.. literally.. a hash map? In minicrates, the V is always a hash of the K...
- */
-pub type CrateIdMap = HashMap<PathBuf, u64>;

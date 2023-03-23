@@ -1,6 +1,6 @@
 
 
 [workspace]
-members = ["example", "example/framework",
+members = ["build", "shared", "example", "example/framework",
 "example/minicrates/*"
 ]
