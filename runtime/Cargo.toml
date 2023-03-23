@@ -1,0 +1,12 @@
+[package]
+name = "minicrates-runtime"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.70"
+lazy_static = "1.4.0"
+minicrates-shared = { version = "0.1.0", path = "../shared" }
+serde_json = "1.0.94"

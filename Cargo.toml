@@ -1,6 +1,6 @@
 
 
 [workspace]
-members = ["build", "shared", "example", "example/framework",
+members = ["build", "runtime", "shared",  "example", "example/framework",
 "example/minicrates/*"
 ]
