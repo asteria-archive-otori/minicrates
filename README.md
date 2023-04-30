@@ -1,3 +1,10 @@
+<div align="center">
+
+# 🌷🌷 Minicrates 🌸🌸
+*Infrastructure for building module files as dynamic library crates*
+</div>
+
+For more information regarding the technical details of the project, see the [**"Dynamic minicrates" infrastructure for Flara story modules**](https://github.com/flaravn/rfcs/blob/main/tech/0001-minicrates.md) RFC.
 
 ## 📜 License
 
